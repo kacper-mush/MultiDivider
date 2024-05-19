@@ -2,89 +2,88 @@ global mdiv
 
 section .text
 
-; rdi -> int128_t *x,       rsi -> int64_t n,       rdx -> int64_t y
+; rdi -> int64_t *x,       rsi -> int64_t n,       rdx -> int64_t y
 mdiv:
     ; in r8 we store information on the four least significant bits:
     ; 1 on 1st bit: x, dividend, negative
     ; 1 on 2nd bit: y, divisor, negative
     ; 1 on 3rd bit: quotient negative
     ; 1 on 4rd bit: jump to second negation
-    xor r8, r8   ; set it to 000 for now
+    xor r8, r8   ; set it to 0000 for now
     
+.dividend_check:  ; negates the dividend if it's negative
+    ; checking the most significant part of the dividend
+    cmp QWORD [rdi + 8 * rsi - 8], r8 ; comparing against r8 that is now 0
+    jge .divisor_check
+
+    ; it is negative, so we set r8 to 0101 and jump to the negation
+    or r8, 0x5
+    jmp .array_negation
+
+.divisor_check:  ; negates the divisor if it's negative
     cmp rdx, 0x0
-    jge .after_divisor_negation ; if the divisor is not negative, we do nothing
+    jge .division_setup
 
-    neg rdx       ; divisor is negative, we switch it from U2 to normal
-    or r8, 0x6    ; we mark that the divisor is negative by setting r8 to 110
+    ; it is negative, so we negate it and xor r8 with 0110, so the 3rd bit
+    ; might switch to 0 if both dividend and divisor are negative
+    neg rdx      
+    xor r8, 0x6 
     
-.after_divisor_negation:
-    ; checking the highest part to see if the dividend is negative
-    cmp QWORD [rdi + 8 * rsi - 8], 0x0  
-    jge .after_dividend_negation
+.division_setup:
+    or r8, 0x8        ; we set the 4th bit to 1 so next dividend jump is set
+    mov rcx, rsi      ; set rcx to n as the counter
+    mov r9, rdx       ; divisor into r9
+    xor rdx, rdx      ; rdx needs to be zero as the remainder for now
 
-    ; r8 4th bit is zero so the jump will come back here
-    jmp .dividend_negation
-.jump_location_1:
-    ; now we xor r8 with 101 so the first bit is for sure on
-    ; and the third might switch to zero if both signs are the same
-    xor r8, 0x5 
+.division_loop: 
+    mov rax, QWORD [rdi + rcx * 8 - 8]  ; move part of the dividend into rax
+    div r9                              ; result in rax, remainder in rdx
+    mov QWORD [rdi + rcx * 8 - 8], rax  ; result back to the dividend
+    loop .division_loop                 ; decrement rcx and exit if it's 0
 
-.after_dividend_negation:
+.after_division:  ; negates the quotient if it should be negative 
+    test r8, 0x4                 ; check the 3rd bit in r8 for information
+    jnz .array_negation          
 
-    mov rcx, rsi            ; set rcx to n as the counter
-    mov r9, rdx             ; divisor into r9
-    xor rdx, rdx            ; rdx needs to be zero for now because there is no remainder
-.division_loop:
-    mov rax, QWORD [rdi + rcx * 8 - 8]   ; move part of the dividend into rax
-    div r9                             ; now the result is in rax an the remainder in rdx
-    mov QWORD [rdi + rcx * 8 - 8], rax   ; result back to the dividend
-    dec rcx        ; decrease the counter
-    jnz .division_loop       ; if the counter is 0, we exit
-
-
-    test r8, 0x4    ; if the third bit in r8 is 1 then the output is negative
-    jz .overflow_check
-
-    or r8, 0x8      ; we set the 4th bit to 1 to indicate where to jump
-    jmp .dividend_negation
-
-.jump_location_2:
+.overflow_check:  ; check if the quotient overflowed and signal
+    ; quotient is positive, the sign bit should be 0
+    xor rax, rax
+    cmp QWORD [rdi + rsi * 8 - 8], rax
+    jge .remainder_setup
+    div rax                             ; div by 0 will signal SIGFPE
     
-    mov rax, rdx                   ; remainder into rax so we can return it
-    test r8, 0x1    ; if the first bit is 1 then the dividend was negative so we need to make the remainder negative
+.remainder_setup:  ; negate the remainder if it should be negative
+    mov rax, rdx                        ; remainder into rax as the return value
+    ; check the 1st bit in r8 - if dividend is negative, so is the remainder
+    test r8, 0x1    
     jz .end
 
     neg rax
+
 .end:
     ret
 
-.overflow_check:
-    ; output is positive, check for overflow
-    xor rax, rax
-    cmp QWORD [rdi + rsi * 8 - 8], rax    ; check if the highest bit is 1
-    jge .jump_location_2
-    div rax
+; performs negation of the array
+; assumptions: *x in rdi, n in rsi, proper jump flag in r8
+; changes: rcx, r9, array, flags
+.array_negation:
+    ; we set rcx to n as the loop counter so it executes n times
+    mov rcx, rsi
+    ; r9 is 0 and we will be incrementing it as the index of the array
+    xor r9, r9          
+    ; set carry to 1 so in the loop we will add 1 to the least significant part
+    ; and perhaps to higher parts if carry occurs during calculation
+    ; we need to be extra careful not to override the CF with other instructions
+    stc                
 
-
-; assumptions: n in rsi, &x in rdi, proper jump flag in r8
-; changes: rax, rcx, r9, flags
-.dividend_negation:
-    mov rcx, rsi        ; now n is in rcx and we will be decrementing it
-    xor r9, r9          ; r9 is 0 and we will be incrementing it up to n
-    stc                 ; set carry to 1 so in the loop we will always...
-                        ; ... add 1 to the lowest and perhaps to higher bits
-                        ; if carry occurs during calculation
-                        ; we need to be extra careful not to override the CF
 .negation_loop: 
-    ;mov rax, QWORD [rdi + 8 * r9]    ; load the part of the dividend into rax
-    not QWORD [rdi + 8 * r9]         ; invert bits
-    adc QWORD [rdi + 8 * r9], 0x0    ; add 1 to the lowest bits and to higher if carry happened
-    ;mov QWORD [rdi + 8 * r9], rax    ; store the result back
-    inc r9   ; counter++
-    dec rcx  ; inv_counter--         
-    jnz .negation_loop    ; if the inv_counter is 0, counter is n, we exit
+    not QWORD [rdi + 8 * r9]
+    adc QWORD [rdi + 8 * r9], 0x0 ; add 1 if carry is set
+    inc r9                            
+    loop .negation_loop           ; decrement rcx and if it's 0 we exit the loop
 
-    test r8, 0x8    ; if the 4th bit is 1 then we jump to the second negation
-    jz .jump_location_1
-    jmp .jump_location_2
+.jump_back:                   ; check where to jump looking at the 4th bit in r8
+    test r8, 0x8
+    jz .divisor_check
+    jmp .remainder_setup
     
