@@ -14,10 +14,7 @@ mdiv:
     cmp rdx, 0x0
     jge .after_divisor_negation ; if the divisor is not negative, we do nothing
 
-    ; divisor is negative, we switch it from U2 to normal
-    neg rdx
-    ;not rdx       ; invert the bits...
-    ;add rdx, 0x1  ; ... and add 1 to get the absolute value
+    neg rdx       ; divisor is negative, we switch it from U2 to normal
     or r8, 0x6    ; we mark that the divisor is negative by setting r8 to 110
     
 .after_divisor_negation:
@@ -44,6 +41,7 @@ mdiv:
     dec rcx        ; decrease the counter
     jnz .division_loop       ; if the counter is 0, we exit
 
+
     test r8, 0x4    ; if the third bit in r8 is 1 then the output is negative
     jz .overflow_check
 
@@ -56,8 +54,7 @@ mdiv:
     test r8, 0x1    ; if the first bit is 1 then the dividend was negative so we need to make the remainder negative
     jz .end
 
-    not rax
-    add rax, 0x1
+    neg rax
 .end:
     ret
 
@@ -79,10 +76,10 @@ mdiv:
                         ; if carry occurs during calculation
                         ; we need to be extra careful not to override the CF
 .negation_loop: 
-    mov rax, QWORD [rdi + 8 * r9]    ; load the part of the dividend into rax
-    not rax         ; invert bits
-    adc rax, 0x0    ; add 1 to the lowest bits and to higher if carry happened
-    mov QWORD [rdi + 8 * r9], rax    ; store the result back
+    ;mov rax, QWORD [rdi + 8 * r9]    ; load the part of the dividend into rax
+    not QWORD [rdi + 8 * r9]         ; invert bits
+    adc QWORD [rdi + 8 * r9], 0x0    ; add 1 to the lowest bits and to higher if carry happened
+    ;mov QWORD [rdi + 8 * r9], rax    ; store the result back
     inc r9   ; counter++
     dec rcx  ; inv_counter--         
     jnz .negation_loop    ; if the inv_counter is 0, counter is n, we exit
