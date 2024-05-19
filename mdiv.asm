@@ -2,7 +2,7 @@ global mdiv
 
 section .text
 
-; rdi -> int64_t *x,       rsi -> int64_t n,       rdx -> int64_t y
+; rdi -> int64_t *x,       rsi -> size_t n,       rdx -> int64_t y
 mdiv:
     ; in r8 we store information on the four least significant bits:
     ; 1 on 1st bit: x, dividend, negative
