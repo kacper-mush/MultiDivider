@@ -7,19 +7,19 @@
 
 #define SIZE(x) (sizeof x / sizeof x[0])
 
-// To jest deklaracja testowanej funkcji.
+// This is the declaration of the assembler function
 int64_t mdiv(int64_t *x, size_t n, int64_t y);
 
-// To jest struktura przechowująca dane do testów i oczekiwane wyniki.
+// This structure stores test data and expected result
 typedef struct {
-  size_t  const  n; // rozmiar dzielnej
-  int64_t const *x; // dzielna
-  int64_t const  y; // dzielnik
-  int64_t const *z; // oczekiwany iloraz
-  int64_t const  r; // oczekiwana reszta
+  size_t  const  n; // dividend size
+  int64_t const *x; // dividend
+  int64_t const  y; // divisor
+  int64_t const *z; // expected quotient
+  int64_t const  r; // expected remainder
 } test_data_t;
 
-// Tu są dane do testów i oczekiwane wyniki.
+// Example test data
 static const test_data_t test_data[] = {
   {1, (int64_t[1]){ 13},  5, (int64_t[1]){ 2},  3},
   {1, (int64_t[1]){-13},  5, (int64_t[1]){-2}, -3},
@@ -44,24 +44,24 @@ int main() {
     bool pass = true;
     if (r != test_data[test].r) {
       pass = false;
-      printf("W teście %zu reszta\n"
-             "jest        %" PRIi64 ",\n"
-             "powinna być %" PRIi64 ".\n",
+      printf("In test %zu remainder\n"
+             "is        %" PRIi64 ",\n"
+             "should be %" PRIi64 ".\n",
              test, r, test_data[test].r);
     }
     for (size_t i = 0; i < n; ++i) {
       if (work_space[i] != test_data[test].z[i]) {
         pass = false;
-        printf("W teście %zu w ilorazie pod indeksem %zu\n"
-               "jest        0x%016" PRIx64 ",\n"
-               "powinno być 0x%016" PRIx64 ".\n",
+        printf("In test %zu in quotient under index %zu\n"
+               "there is    0x%016" PRIx64 ",\n"
+               "should be   0x%016" PRIx64 ".\n",
                test, i, work_space[i], test_data[test].z[i]);
       }
     }
     free(work_space);
 
     if (pass) {
-      printf("Test %zu zakończył się poprawnie.\n", test);
+      printf("Test %zu was successful.\n", test);
     }
   }
 }
